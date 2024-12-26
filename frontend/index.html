@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DisRe</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Azure Maps SDK -->
+    <script src="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.js"></script>
+    <link href="https://atlas.microsoft.com/sdk/javascript/mapcontrol/2/atlas.min.css" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>Disaster Relief Assistant</h1>
+    </header>
+    <main>
+        <section class="form-section">
+            <input type="text" id="address-input" placeholder="Enter your address">
+            <button id="search-btn">Search</button>
+        </section>
+        <section class="map-section">
+            <div id="map" style="width: 100%; height: 500px;"></div>
+        </section>
+        <!--
+        <section class="services-section">
+            <h2>Nearby Emergency services</h2>
+            <ul id="service-list"></ul>
+        </section>
+    -->
+    </main>
+    <footer>
+        <p>&copy; 2024 Disaster Relief Assistant</p>
+    </footer>
+    <script src="script.js"></script>
+</body>
+</html>
