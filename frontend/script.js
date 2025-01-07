@@ -1,65 +1,93 @@
-// Azure Maps Subscription Key
-const azureMapsKey = ''; // Replace with your actual key
-const backendUrl = 'http://127.0.0.1:5000/services'; // Update with your backend URL
-
+const backendUrl = 'http://127.0.0.1:5000'; 
 let map;
-// Trigger location fetching and map initialization on page load
-window.onload = () => {
-    getUserLocation();
+let azureMapsToken = null;
+
+// Fetch Azure Maps token from backend
+async function getAzureMapsToken() {
+    try {
+        const response = await fetch(`${backendUrl}/api/maps-token`);
+        if (!response.ok) throw new Error('Failed to fetch maps token');
+        const data = await response.json();
+        return data.token;
+    } catch (error) {
+        console.error('Error fetching Azure Maps token:', error);
+        throw error;
+    }
+}
+
+// Initialize on page load
+window.onload = async () => {
+    try {
+        // Get token first
+        azureMapsToken = await getAzureMapsToken();
+        getUserLocation();
+    } catch (error) {
+        alert('Failed to initialize map services. Please try again later.');
+    }
 };
 
+// Function to the users loaction
 function getUserLocation() {
     if (!navigator.geolocation) {
         alert("Geolocation is not supported by your browser.");
         return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    // Watch the user's location and update it dynamically
+    const watchId = navigator.geolocation.watchPosition(
         (position) => {
             const userLatitude = position.coords.latitude;
             const userLongitude = position.coords.longitude;
 
-            console.log("User's location fetched:", { latitude: userLatitude, longitude: userLongitude });
+            console.log("User's location updated:", { latitude: userLatitude, longitude: userLongitude });
 
-            // Initialize the map centered on the user's location
+            // Update the map or any other logic with the new user location
             initializeMap([userLongitude, userLatitude]);
         },
         (error) => {
             console.error("Error fetching user location:", error);
-            alert("Failed to get your location.");
+            alert("Failed to track your location.");
+        },
+        {
+            enableHighAccuracy: true, // Use high-accuracy mode (e.g., GPS)
+            maximumAge: 0,           // No cached positions
+            timeout: 10000           // Timeout for location retrieval
         }
     );
+
+    // Optionally, allow the user to stop tracking their location
+    return function stopTracking() {
+        navigator.geolocation.clearWatch(watchId);
+        console.log("Stopped tracking user location.");
+    };
 }
 
 // Function to initialize the Azure Map
 function initializeMap(center) {
-    if (!azureMapsKey || azureMapsKey === '<YOUR_AZURE_MAPS_SUBSCRIPTION_KEY>') {
-        console.error("Azure Maps Key is missing or invalid.");
-        alert("Azure Maps Key is required to load the map.");
+    if (!azureMapsToken) {
+        console.error("Azure Maps Token is not available.");
+        alert("Failed to initialize map. Please refresh the page.");
         return;
     }
 
     try {
-        // Initialize the map
         map = new atlas.Map('map', {
             center: center,
             zoom: 12,
             authOptions: {
                 authType: 'subscriptionKey',
-                subscriptionKey: azureMapsKey
+                subscriptionKey: azureMapsToken
             }
         });
 
-        // Once the map is ready, add the user's location marker and fetch services
         map.events.add('ready', () => {
             addUserLocationMarker(center);
             fetchNearbyEmergencyServices(center[1], center[0]);
         });
 
-        console.log("Map initialized successfully.");
     } catch (error) {
-        console.error("Error initializing Azure Map:", error.message);
-        alert("Failed to load the map. Please check the console for details.");
+        console.error("Error initializing Azure Map:", error);
+        alert("Failed to load the map. Please try again later.");
     }
 }
 
@@ -68,7 +96,30 @@ function addUserLocationMarker(location) {
     const userMarker = new atlas.HtmlMarker({
         color: 'red',
         position: location,
-        htmlContent: '<div style="background-color: red; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>'
+        htmlContent: 
+        `   <div style="
+                display: flex; 
+                align-items: center; 
+                flex-direction: column; 
+                text-align: center;">
+                <div style="
+                    background-color: red; 
+                    width: 15px; 
+                    height: 15px; 
+                    border-radius: 50%; 
+                    border: 2px solid white;
+                "></div>
+                <div style="
+                    margin-top: 5px; 
+                    background-color: white; 
+                    padding: 2px 5px; 
+                    border-radius: 3px; 
+                    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2); 
+                    font-size: 12px;
+                ">
+                 <strong>You are here</strong>
+                </div>
+            </div>`
     });
 
     map.markers.add(userMarker);
@@ -78,38 +129,29 @@ function addUserLocationMarker(location) {
 
 // Function to fetch nearby emergency services from the backend
 async function fetchNearbyEmergencyServices(latitude, longitude) {
-    console.log("Sending request to backend:", { latitude, longitude });
-
     try {
-        const response = await fetch(backendUrl, {
+        const response = await fetch(`${backendUrl}/api/services`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ latitude, longitude, radius: 5000 })
         });
 
-        console.log("Response status:", response.status);
-
-        if (response.ok) {
-            const services = await response.json();
-            console.log("Services received from backend:", services);
-
-            // Validate response
-            if (Array.isArray(services) && services.length > 0) {
-                displayEmergencyServices(services, { latitude, longitude });
-            } else {
-                alert("No emergency services found within a 5km radius.");
-                console.error("Services array is empty or not valid:", services);
-            }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const services = await response.json();
+        
+        if (Array.isArray(services) && services.length > 0) {
+            displayEmergencyServices(services, { latitude, longitude });
         } else {
-            console.error("Failed to fetch services. Status:", response.status, response.statusText);
-            alert("Error fetching services from backend.");
+            alert("No emergency services found within a 5km radius.");
         }
     } catch (error) {
-        console.error("Error during fetch:", error.message);
-        alert("Unable to connect to the server. Please check your network.");
+        console.error("Error fetching services:", error);
+        alert("Failed to fetch nearby services. Please try again later.");
     }
 }
 
+
+// Function to display blue markers of emergency services nearby in order 
 function displayEmergencyServices(services, userLocation) {
     console.log("Displaying services on map and list:", services);
 
@@ -127,16 +169,39 @@ function displayEmergencyServices(services, userLocation) {
         // Add a blue marker for each service
         const serviceMarker = new atlas.HtmlMarker({
             position: [service.longitude, service.latitude],
-            htmlContent: '<div style="background-color: blue; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white;"></div>'
+            htmlContent: 
+            `   <div style="
+                display: flex; 
+                align-items: center; 
+                flex-direction: column; 
+                text-align: center;">
+                <div style="
+                    background-color: blue; 
+                    width: 15px; 
+                    height: 15px; 
+                    border-radius: 50%; 
+                    border: 2px solid white;
+                "></div>
+                <div style="
+                    margin-top: 5px; 
+                    background-color: white; 
+                    padding: 2px 5px; 
+                    border-radius: 3px; 
+                    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2); 
+                    font-size: 12px;
+                ">
+                    ${service.name}
+                </div>
+            </div>`
         });
         map.markers.add(serviceMarker);
         console.log(`Added marker for service: ${service.name} at position: [${service.longitude}, ${service.latitude}]`);
-
+    
         // Add service details to the ordered list
         const listItem = document.createElement('li');
         listItem.innerHTML = `
             ${index + 1}. <strong>${service.name}</strong> (${service.type}) - 
-            ${service.phone} (${service.distance.toFixed(2)/1000} km) 
+            ${service.phone} (${(service.distance /1000).toFixed(2)} km)
             <br>Address: ${service.address}
         `;
         listContainer.appendChild(listItem);
@@ -146,32 +211,3 @@ function displayEmergencyServices(services, userLocation) {
     console.log("Services displayed successfully.");
 }
 
-
-// Function to get user's current location and initialize the map
-function getUserLocation() {
-    if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser.");
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            const userLatitude = position.coords.latitude;
-            const userLongitude = position.coords.longitude;
-
-            console.log("User location:", { userLatitude, userLongitude });
-
-            // Initialize the map centered on the user's location
-            initializeMap([userLongitude, userLatitude]);
-        },
-        (error) => {
-            console.error("Error fetching user location:", error.message);
-            alert("Failed to get your location. Please enable location services.");
-        }
-    );
-}
-
-// Trigger the location fetching and map initialization on page load
-window.onload = () => {
-    getUserLocation();
-};
